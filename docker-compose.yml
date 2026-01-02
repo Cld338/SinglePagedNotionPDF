@@ -1,0 +1,16 @@
+# version: '3.8'
+
+services:
+  # 1. 앱 서비스
+  fastapi-app:
+    build: .
+    container_name: my-pdf-app
+    restart: always
+    networks:      
+      - cld-net
+
+
+# 파일 맨 아래에 추가
+networks:
+  cld-net:
+    external: true
