@@ -16,7 +16,7 @@
     </style>
 </head>
 <body>
-    <h1>Web to PDF Converter (Win)</h1>
+    <h1>Notion to PDF</h1>
     <form action="/convert-url" method="POST">
         <div class="form-group">
             <label for="url">Target URL:</label>
@@ -29,6 +29,7 @@
         <div class="form-group checkbox-group">
             <label><input type="checkbox" name="includeTitle" value="true"> Include Title</label>
             <label><input type="checkbox" name="includeBanner" value="true"> Include Banner</label>
+            <label><input type="checkbox" name="includeTags" value="true"> include Tags</label>
         </div>
         <button type="submit">Convert to PDF</button>
     </form>

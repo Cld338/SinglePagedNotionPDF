@@ -125,15 +125,44 @@ class PdfService {
                     `
                 });
 
-                await page.evaluate((opts) => {
-                    const { includeBanner, includeTitle, includeTags } = opts;
-                    // if (!includeBanner) document.querySelector('html > body > div > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > main > div > div > div:nth-of-type(3) > div > div:nth-of-type(2) > div > div > div > div > div > img')?.remove();
-                    
-                    // if (!includeTitle) document.querySelector('html > body > div > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > main > div > div > div:nth-of-type(3) > div > div:nth-of-type(3) > div > div > div:nth-of-type(2) > div > div:nth-of-type(1) > h1').remove();
-                    
+                let hideStyles = '';
+                
+                // 1. 제목 제거 스타일
+                if (!includeTitle) {
+                    hideStyles += `
+                        h1, .notion-page-block:has(h1) { 
+                            display: none !important; 
+                        }
+                    `;
+                }
 
-                    // if (!includeTags) document.querySelector('.properties')?.remove();
+                // 2. 배너 및 아이콘 제거 스타일
+                if (!includeBanner) {
+                    hideStyles += `
+                        .notion-page-cover-wrapper, 
+                        .notion-record-icon, 
+                        .notion-page-controls { 
+                            display: none !important; 
+                        }
+                    `;
+                }
 
+                // 3. 태그/속성 제거 스타일
+                if (!includeTags) {
+                    hideStyles += `
+                        [aria-label="페이지 속성"], 
+                        .layout-content-with-divider:has([role="table"]) { 
+                            display: none !important; 
+                        }
+                    `;
+                }
+
+                // 완성된 스타일을 페이지에 주입
+                await page.addStyleTag({ content: hideStyles });
+
+                await page.evaluate(() => {
+
+                    /** [참고] 노션 본문 내 목차 링크 처리 (기존 로직 유지) */
                     document.querySelectorAll('div.notion-selectable.notion-table_of_contents-block a').forEach(link => {
                         const href = link.getAttribute('href');
                         if (href && href.includes('#')) {
