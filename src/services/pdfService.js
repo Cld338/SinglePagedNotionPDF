@@ -127,9 +127,12 @@ class PdfService {
 
                 await page.evaluate((opts) => {
                     const { includeBanner, includeTitle, includeTags } = opts;
-                    if (!includeBanner) document.querySelector('.page-cover-image')?.remove();
-                    if (!includeTitle) document.querySelector('.page-title')?.remove();
-                    if (!includeTags) document.querySelector('.properties')?.remove();
+                    // if (!includeBanner) document.querySelector('html > body > div > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > main > div > div > div:nth-of-type(3) > div > div:nth-of-type(2) > div > div > div > div > div > img')?.remove();
+                    
+                    // if (!includeTitle) document.querySelector('html > body > div > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > main > div > div > div:nth-of-type(3) > div > div:nth-of-type(3) > div > div > div:nth-of-type(2) > div > div:nth-of-type(1) > h1').remove();
+                    
+
+                    // if (!includeTags) document.querySelector('.properties')?.remove();
 
                     document.querySelectorAll('div.notion-selectable.notion-table_of_contents-block a').forEach(link => {
                         const href = link.getAttribute('href');
