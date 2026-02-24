@@ -157,9 +157,11 @@ class PdfService {
                     `;
                 }
 
-                // 완성된 스타일을 페이지에 주입
-                await page.addStyleTag({ content: hideStyles });
+                if (hideStyles.trim().length > 0) {
+                    await page.addStyleTag({ content: hideStyles });
+                }
 
+                
                 await page.evaluate(() => {
 
                     /** [참고] 노션 본문 내 목차 링크 처리 (기존 로직 유지) */
