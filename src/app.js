@@ -3,24 +3,38 @@ const helmet = require('helmet');
 const cors = require('cors');
 const Joi = require('joi');
 const path = require('path');
-const { URL } = require('url');
+const rateLimit = require('express-rate-limit');
+const { Queue } = require('bullmq');
+const IORedis = require('ioredis');
 require('dotenv').config();
 
-const pdfService = require('./services/pdfService');
 const logger = require('./utils/logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// [추가] 프록시 환경(Docker 브릿지, Nginx 등)에서 클라이언트의 실제 IP를 신뢰하도록 설정
+app.set('trust proxy', 1);
+
+const connection = new IORedis({
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: process.env.REDIS_PORT || 6379
+});
+const pdfQueue = new Queue('pdf-conversion', { connection });
+
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-// PDF는 용량이 클 수 있으므로 제한을 50mb로 늘립니다.
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
-// 서버 시작 시 브라우저 초기화
-(async () => { await pdfService.init(); })();
+const convertLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: '요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
 const convertSchema = Joi.object({
     url: Joi.string().uri().required(),
@@ -30,64 +44,51 @@ const convertSchema = Joi.object({
     includeTags: Joi.boolean().default(false)
 });
 
-app.post('/convert-url', async (req, res) => {
+// [수정] 작업 큐 등록 엔드포인트
+app.post('/convert-url', convertLimiter, async (req, res) => {
     try {
         const rawBody = { ...req.body };
         ['includeBanner', 'includeTitle', 'includeTags'].forEach(key => {
-            if (typeof rawBody[key] === 'string') {
-                rawBody[key] = rawBody[key].toLowerCase() === 'true';
-            }
+            if (typeof rawBody[key] === 'string') rawBody[key] = rawBody[key].toLowerCase() === 'true';
         });
 
         const { error, value } = convertSchema.validate(rawBody);
+        if (error) return res.status(400).json({ error: error.details[0].message });
 
-        if (error) {
-            logger.warn(`Validation Error: ${error.details[0].message}`);
-            return res.status(400).json({ error: error.details[0].message });
-        }
-
-        const { url: targetUrl, width, includeBanner, includeTitle, includeTags } = value;
-
-        logger.info(`Processing URL: ${targetUrl}`);
-
-        // PDF 생성
-        const pdfBuffer = await pdfService.generatePdf(targetUrl, {
-            width, includeBanner, includeTitle, includeTags
+        const job = await pdfQueue.add('convert', {
+            targetUrl: value.url,
+            options: { width: value.width, includeBanner: value.includeBanner, includeTitle: value.includeTitle, includeTags: value.includeTags }
+        }, {
+            removeOnComplete: 100,
+            removeOnFail: 500
         });
 
-        // [중요] 생성된 데이터 검증 로직
-        if (!pdfBuffer || pdfBuffer.length < 1000) {
-            logger.error('Generated PDF is too small or empty.');
-            return res.status(500).json({ error: 'PDF Generation failed (Empty file)' });
-        }
-
-        logger.info(`PDF Generated Successfully! Size: ${(pdfBuffer.length / 1024 / 1024).toFixed(2)} MB`);
-
-        let filename = 'document.pdf';
-        try {
-            const parsedUrl = new URL(targetUrl);
-            filename = `${parsedUrl.hostname.replace(/\./g, '_')}.pdf`;
-        } catch (e) { }
-
-        // 헤더 설정 강화
-        res.set({
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename="${filename}"`,
-            'Content-Length': pdfBuffer.length,
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-        });
-
-        res.send(pdfBuffer);
-        logger.info(`Sent PDF to client.`);
+        logger.info(`Job ${job.id} added to queue for URL: ${value.url}`);
+        res.status(202).json({ jobId: job.id, message: '변환 대기열에 등록되었습니다.' });
 
     } catch (err) {
-        logger.error(`Failed to process request: ${err.message}`);
-        // 에러 발생 시 JSON으로 명확히 응답
-        if (!res.headersSent) {
-            res.status(500).json({ error: `Internal Server Error: ${err.message}` });
+        logger.error(`Failed to enqueue job: ${err.message}`);
+        res.status(500).json({ error: '서버 내부 오류로 대기열 등록에 실패했습니다.' });
+    }
+});
+
+// [신규] 상태 확인(Polling) 엔드포인트
+app.get('/job-status/:id', async (req, res) => {
+    try {
+        const job = await pdfQueue.getJob(req.params.id);
+        if (!job) return res.status(404).json({ error: '작업을 찾을 수 없습니다.' });
+
+        const state = await job.getState();
+        
+        if (state === 'completed') {
+            return res.json({ status: 'completed', result: job.returnvalue });
+        } else if (state === 'failed') {
+            return res.status(500).json({ status: 'failed', error: job.failedReason });
+        } else {
+            return res.json({ status: state }); 
         }
+    } catch (err) {
+        res.status(500).json({ error: '상태 조회 중 오류가 발생했습니다.' });
     }
 });
 
@@ -95,18 +96,30 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public', 'index.html'));
 });
 
+// [신규] 파일 정리 스케줄러 (1시간 경과 파일 삭제)
+setInterval(() => {
+    const fs = require('fs');
+    const downloadsDir = path.join(__dirname, '../public/downloads');
+    fs.readdir(downloadsDir, (err, files) => {
+        if (err) return;
+        const now = Date.now();
+        files.forEach(file => {
+            if (file === '.gitkeep') return;
+            const filePath = path.join(downloadsDir, file);
+            fs.stat(filePath, (err, stats) => {
+                if (err) return;
+                if (now - stats.mtimeMs > 60 * 60 * 1000) {
+                    fs.unlink(filePath, () => logger.info(`Deleted old file: ${file}`));
+                }
+            });
+        });
+    });
+}, 60 * 60 * 1000);
+
 const server = app.listen(PORT, () => {
     logger.info(`Server running on http://localhost:${PORT}`);
 });
 
-const gracefulShutdown = async () => {
-    logger.info('Shutting down gracefully...');
-    server.close(() => logger.info('Closed HTTP server.'));
-    await pdfService.close();
-    process.exit(0);
-};
-
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
-
+process.on('SIGTERM', () => server.close());
+process.on('SIGINT', () => server.close());
 module.exports = app;

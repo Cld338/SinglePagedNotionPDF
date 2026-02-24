@@ -1,16 +1,50 @@
-# version: '3.8'
+version: '3.8'
 
 services:
-  # 1. 앱 서비스
+  # 1. API 서버 컨테이너
   fastapi-app:
     build: .
     container_name: my-pdf-app
     restart: always
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./public/downloads:/usr/src/public/downloads
+    ports:
+      - "3000:3000"
     networks:      
       - cld-net
+    depends_on:
+      - redis
+    command: ["node", "src/app.js"] # 명시적 API 서버 실행
 
+  # 2. Worker 전용 컨테이너 신규 추가
+  pdf-worker:
+    build: .
+    container_name: my-pdf-worker
+    restart: always
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./public/downloads:/usr/src/public/downloads # 동일한 볼륨 마운트 (파일 공유)
+    networks:      
+      - cld-net
+    depends_on:
+      - redis
+    command: ["node", "src/worker.js"] # 명시적 워커 프로세스 실행
 
-# 파일 맨 아래에 추가
+  # 3. Redis 캐시/큐 시스템
+  redis:
+    image: redis:alpine
+    container_name: my-pdf-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - cld-net
+
 networks:
   cld-net:
     external: true

@@ -4,34 +4,114 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Converter</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
-        h1 { color: #333; }
-        .form-group { margin-bottom: 1rem; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        input[type="text"] { width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { padding: 0.7rem 1.5rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
-        button:hover { background: #0056b3; }
-        .checkbox-group label { display: inline-block; margin-right: 15px; font-weight: normal; }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>Notion to PDF</h1>
-    <form action="/convert-url" method="POST">
-        <div class="form-group">
-            <label for="url">Target URL:</label>
-            <input type="text" id="url" name="url" placeholder="https://notion.site/..." required>
+    <div class="container">
+        <h1 class="title">Notion to PDF</h1>
+        <p class="subtitle">노션 페이지를 PDF로 변환합니다.</p>
+        
+        <div class="card">
+            <form id="convertForm">
+                <div class="form-group">
+                    <label for="url">Target URL:</label>
+                    <input type="text" id="url" name="url" placeholder="https://notion.site/..." required>
+                </div>
+                <div class="form-group">
+                    <label for="width">Width (px):</label>
+                    <input type="text" id="width" name="width" value="1080px">
+                </div>
+                <div class="form-group checkbox-group">
+                    <label class="option"><input type="checkbox" name="includeTitle" value="true"> <span>Include Title</span></label>
+                    <label class="option"><input type="checkbox" name="includeBanner" value="true"> <span>Include Banner</span></label>
+                    <label class="option"><input type="checkbox" name="includeTags" value="true"> <span>Include Tags</span></label>
+                </div>
+                <button type="submit" id="submitBtn" class="submit-btn">Convert to PDF</button>
+            </form>
         </div>
-        <div class="form-group">
-            <label for="width">Width (px):</label>
-            <input type="text" id="width" name="width" value="1080px">
+
+        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <p class="loading-text">PDF 변환 중입니다.<br>최대 2분 정도 소요될 수 있습니다...</p>
         </div>
-        <div class="form-group checkbox-group">
-            <label><input type="checkbox" name="includeTitle" value="true"> Include Title</label>
-            <label><input type="checkbox" name="includeBanner" value="true"> Include Banner</label>
-            <label><input type="checkbox" name="includeTags" value="true"> include Tags</label>
-        </div>
-        <button type="submit">Convert to PDF</button>
-    </form>
+    </div>
+
+    <script>
+        document.getElementById('convertForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingText = document.querySelector('.loading-text');
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Converting...';
+            loadingOverlay.style.display = 'flex';
+            loadingText.innerHTML = 'PDF 변환 대기열에 등록 중입니다...';
+
+            const formData = new FormData(this);
+            const data = {
+                url: formData.get('url'),
+                width: formData.get('width') || '1080px',
+                includeTitle: formData.get('includeTitle') === 'true',
+                includeBanner: formData.get('includeBanner') === 'true',
+                includeTags: formData.get('includeTags') === 'true'
+            };
+
+            try {
+                // 1. 변환 요청 (Job 생성)
+                const response = await fetch('/convert-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const resData = await response.json();
+                if (!response.ok) throw new Error(resData.error || '요청 실패');
+
+                const jobId = resData.jobId;
+                loadingText.innerHTML = '변환 진행 중입니다.<br>최대 2분 정도 소요될 수 있습니다...';
+
+                // 2. 상태 폴링 (3초 간격)
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(`/job-status/${jobId}`);
+                        const statusData = await statusRes.json();
+
+                        if (statusData.status === 'completed') {
+                            clearInterval(pollInterval);
+                            
+                            // 다운로드 트리거
+                            const a = document.createElement('a');
+                            a.href = statusData.result.downloadUrl;
+                            a.download = statusData.result.fileName;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+
+                            resetUI();
+                        } else if (statusData.status === 'failed') {
+                            clearInterval(pollInterval);
+                            throw new Error(statusData.error || '변환 중 오류가 발생했습니다.');
+                        }
+                    } catch (pollError) {
+                        clearInterval(pollInterval);
+                        alert(`오류 발생: ${pollError.message}`);
+                        resetUI();
+                    }
+                }, 3000);
+
+            } catch (error) {
+                alert(`오류 발생: ${error.message}`);
+                resetUI();
+            }
+
+            function resetUI() {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Convert to PDF';
+                loadingOverlay.style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html>
