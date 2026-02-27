@@ -9,7 +9,7 @@
 
 ## 기술 스택
 - **Backend & Queue**: Node.js (Express), BullMQ, Redis
-- **Rendering Engine**: Puppeteer (Headless Chrome)
+- **Rendering**: Puppeteer (Headless Chrome)
 
 ## 퀵 스타트
 
