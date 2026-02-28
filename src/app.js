@@ -28,6 +28,8 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
+app.use('/docs', express.static(path.join(__dirname, '../docs/.vitepress/dist')));
+
 const convertLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
