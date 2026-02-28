@@ -2,12 +2,10 @@
 layout: home
 
 hero:
-  name: SinglePagedNotionPDF
+  name: Single Notion
   text: 노션 문서를 한 페이지의 PDF로
   tagline: 끊김 없는 고품질 PDF 변환 및 관리 서비스
-  image:
-    src: /logo.png
-    alt: SinglePagedNotionPDF Logo
+
   actions:
     - theme: brand
       text: 시작하기

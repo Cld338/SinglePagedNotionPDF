@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: "Single Paged Notion PDF",
+  title: "Single Notion",
   description: "Description",
+  base: '/docs/',
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
