@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Single Notion
-  text: 노션 문서를 한 페이지의 PDF로
-  tagline: 끊김 없는 고품질 PDF 변환 및 관리 서비스
+  text: 노션 문서를 한 페이지로
+  tagline: PDF 변환 서비스
 
   actions:
     - theme: brand
@@ -15,7 +15,7 @@ hero:
       link: /api/endpoints
     - theme: alt
       text: GitHub
-      link: https://github.com/Cld338/SinglePagedNotionPDF
+      link: https://github.com/Cld338/SingleNotion
 
 features:
   - title: 📄 단일 페이지 변환
@@ -47,8 +47,8 @@ features:
 
 ```bash
 # 1. 저장소 클론
-git clone [https://github.com/Cld338/SinglePagedNotionPDF](https://github.com/Cld338/SinglePagedNotionPDF)
-cd SinglePagedNotionPDF
+git clone [https://github.com/Cld338/SingleNotion](https://github.com/Cld338/SingleNotion)
+cd SingleNotion
 
 # 2. Docker Compose로 실행
 docker-compose up -d --build

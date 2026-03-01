@@ -52,7 +52,7 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/cld338/singlepagednotionpdf' }
+      { icon: 'github', link: 'https://github.com/cld338/SingleNotion' }
     ]
   }
 })

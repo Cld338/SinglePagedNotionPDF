@@ -1,4 +1,4 @@
-# SinglePagedNotionPDF
+# SingleNotion
 
 노션 문서를 한 페이지의 PDF로 변환하는 웹 서비스입니다.
 
@@ -15,8 +15,8 @@
 
 ```bash
 # 1. 저장소 클론
-git clone <https://github.com/Cld338/SinglePagedNotionPDF>
-cd SinglePagedNotionPDF
+git clone <https://github.com/Cld338/SingleNotion>
+cd SingleNotion
 
 # 2. Docker Compose로 실행
 docker-compose up -d --build
