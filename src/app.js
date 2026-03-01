@@ -22,13 +22,80 @@ const connection = new IORedis({
 });
 const pdfQueue = new Queue('pdf-conversion', { connection });
 
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false, // 다운로드 차단의 주된 원인을 제거합니다.
+    crossOriginResourcePolicy: { policy: "cross-origin" } 
+}));
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// 2. [수정] 전용 다운로드 엔드포인트 도입 (정적 서빙 대신 권장)
+app.get('/download/:filename', (req, res) => {
+    const fileName = req.params.filename;
+    const filePath = path.join(__dirname, '../public/downloads', fileName);
+
+    // 보안을 위한 파일명 검증 (경로 탐색 공격 방지)
+    if (!/^[a-zA-Z0-9\-\.]+\.pdf$/.test(fileName)) {
+        return res.status(400).json({ error: '잘못된 파일 형식입니다.' });
+    }
+
+    res.download(filePath, fileName, (err) => {
+        if (err) {
+            if (res.headersSent) return;
+            res.status(404).json({ error: '파일을 찾을 수 없거나 이미 삭제되었습니다.' });
+        }
+    });
+});
+
 app.use(express.static(path.join(__dirname, '../public')));
 
 app.use('/docs', express.static(path.join(__dirname, '../docs/.vitepress/dist')));
+
+// src/app.js
+app.get('/job-events/:id', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const jobId = req.params.id;
+
+    const intervalId = setInterval(async () => {
+        try {
+            // [수정] Stale State 방지를 위해 매 주기마다 Job의 최신 상태를 큐에서 재조회
+            const job = await pdfQueue.getJob(jobId);
+            
+            if (!job) {
+                res.write(`data: ${JSON.stringify({ status: 'error', error: '작업을 찾을 수 없습니다.' })}\n\n`);
+                clearInterval(intervalId);
+                return res.end();
+            }
+
+            const state = await job.getState();
+            
+            if (state === 'completed') {
+                // 재조회된 객체이므로 정상적으로 returnvalue(결과값)를 참조 가능
+                const result = job.returnvalue; 
+                res.write(`data: ${JSON.stringify({ status: 'completed', result })}\n\n`);
+                clearInterval(intervalId);
+                res.end();
+            } else if (state === 'failed') {
+                res.write(`data: ${JSON.stringify({ status: 'failed', error: job.failedReason })}\n\n`);
+                clearInterval(intervalId);
+                res.end();
+            } else {
+                res.write(`data: ${JSON.stringify({ status: state })}\n\n`);
+            }
+        } catch (err) {
+            res.write(`data: ${JSON.stringify({ status: 'error', error: '상태 조회 중 오류 발생' })}\n\n`);
+            clearInterval(intervalId);
+            res.end();
+        }
+    }, 2000);
+
+    req.on('close', () => clearInterval(intervalId));
+});
 
 const convertLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -73,27 +140,47 @@ app.post('/convert-url', convertLimiter, async (req, res) => {
         res.status(500).json({ error: '서버 내부 오류로 대기열 등록에 실패했습니다.' });
     }
 });
+// [수정] SSE를 이용한 상태 실시간 스트리밍 엔드포인트
+app.get('/job-events/:id', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-// [신규] 상태 확인(Polling) 엔드포인트
-app.get('/job-status/:id', async (req, res) => {
-    try {
-        const job = await pdfQueue.getJob(req.params.id);
-        if (!job) return res.status(404).json({ error: '작업을 찾을 수 없습니다.' });
-
-        const state = await job.getState();
-        
-        if (state === 'completed') {
-            return res.json({ status: 'completed', result: job.returnvalue });
-        } else if (state === 'failed') {
-            return res.status(500).json({ status: 'failed', error: job.failedReason });
-        } else {
-            return res.json({ status: state }); 
-        }
-    } catch (err) {
-        res.status(500).json({ error: '상태 조회 중 오류가 발생했습니다.' });
+    const jobId = req.params.id;
+    const job = await pdfQueue.getJob(jobId);
+    
+    if (!job) {
+        res.write(`data: ${JSON.stringify({ status: 'error', error: '작업을 찾을 수 없습니다.' })}\n\n`);
+        return res.end();
     }
-});
 
+    // 서버 사이드에서 상태를 확인하여 클라이언트로 이벤트 전송
+    const intervalId = setInterval(async () => {
+        try {
+            const state = await job.getState();
+            if (state === 'completed') {
+                const result = job.returnvalue;
+                res.write(`data: ${JSON.stringify({ status: 'completed', result })}\n\n`);
+                clearInterval(intervalId);
+                res.end();
+            } else if (state === 'failed') {
+                res.write(`data: ${JSON.stringify({ status: 'failed', error: job.failedReason })}\n\n`);
+                clearInterval(intervalId);
+                res.end();
+            } else {
+                // active 또는 waiting 상태 전송
+                res.write(`data: ${JSON.stringify({ status: state })}\n\n`);
+            }
+        } catch (err) {
+            res.write(`data: ${JSON.stringify({ status: 'error', error: '상태 조회 중 오류 발생' })}\n\n`);
+            clearInterval(intervalId);
+            res.end();
+        }
+    }, 2000);
+
+    // 클라이언트 연결 종료 시 인터벌 해제
+    req.on('close', () => clearInterval(intervalId));
+});
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public', 'index.html'));

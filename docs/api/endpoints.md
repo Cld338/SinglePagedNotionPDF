@@ -23,17 +23,18 @@
   "message": "변환 대기열에 등록되었습니다."
 }
 
-2. 작업 상태 조회 (Polling)
-등록된 변환 작업의 현재 상태를 확인합니다.
+## 2. 작업 상태 실시간 수신 (SSE)
+Server-Sent Events(SSE)를 통해 등록된 변환 작업의 진행 상태를 실시간으로 스트리밍받습니다.
 
-URL: /job-status/:id
+- **URL:** `/job-events/:id`
+- **Method:** `GET`
+- **Headers:** `Accept: text/event-stream`
 
-Method: GET
+### URL Parameters
+- `id`: `/convert-url`에서 발급받은 `jobId`
 
-URL Parameters
-id: /convert-url에서 발급받은 jobId
-
-### Success Response (완료 시 - 200 OK)
+### Event Stream Response (데이터 구조)
+완료 시 (Event Data)
 
 ```json
 {
@@ -43,12 +44,26 @@ id: /convert-url에서 발급받은 jobId
     "fileName": "notion-1-1700000000000.pdf"
   }
 }
-```
 
-Pending Response (진행 중 - 200 OK)
+진행 중 시 (Event Data)
 ```json
 {
   "status": "active" // 또는 "waiting"
 }
 ```
 
+
+## 3. PDF 파일 다운로드
+변환이 완료된 PDF 파일의 다운로드를 강제(Content-Disposition: attachment)합니다.
+
+- **URL:** `/api/downloads/:fileName`
+- **Method:** `GET`
+
+### URL Parameters
+| 파라미터명 | 타입 | 필수 여부 | 설명 |
+|---|---|---|---|
+| `fileName` | string | 필수 | 다운로드할 대상 PDF 파일명 |
+
+### Success Response (200 OK)
+- **응답 본문:** 파일 스트림 (File Stream)
+- **응답 헤더:** `Content-Disposition: attachment; filename="{fileName}"`

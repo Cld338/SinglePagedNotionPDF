@@ -72,34 +72,36 @@
                 const jobId = resData.jobId;
                 loadingText.innerHTML = '변환 진행 중입니다.<br>최대 2분 정도 소요될 수 있습니다...';
 
-                // 2. 상태 폴링 (3초 간격)
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const statusRes = await fetch(`/job-status/${jobId}`);
-                        const statusData = await statusRes.json();
+                // 2. SSE를 이용한 상태 수신 (Polling 대체)
+                const eventSource = new EventSource(`/job-events/${jobId}`);
 
-                        if (statusData.status === 'completed') {
-                            clearInterval(pollInterval);
-                            
-                            // 다운로드 트리거
-                            const a = document.createElement('a');
-                            a.href = statusData.result.downloadUrl;
-                            a.download = statusData.result.fileName;
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
+                eventSource.onmessage = function(event) {
+                    const statusData = JSON.parse(event.data);
 
-                            resetUI();
-                        } else if (statusData.status === 'failed') {
-                            clearInterval(pollInterval);
-                            throw new Error(statusData.error || '변환 중 오류가 발생했습니다.');
-                        }
-                    } catch (pollError) {
-                        clearInterval(pollInterval);
-                        alert(`오류 발생: ${pollError.message}`);
+                    if (statusData.status === 'completed') {
+                        eventSource.close(); // 작업 완료 시 연결 종료
+                        
+                        // 다운로드 트리거
+                        const a = document.createElement('a');
+                        a.href = statusData.result.downloadUrl;
+                        a.download = statusData.result.fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+
+                        resetUI();
+                    } else if (statusData.status === 'failed' || statusData.status === 'error') {
+                        eventSource.close(); // 작업 실패 시 연결 종료
+                        alert(`오류 발생: ${statusData.error || '변환 중 오류가 발생했습니다.'}`);
                         resetUI();
                     }
-                }, 3000);
+                };
+
+                eventSource.onerror = function(err) {
+                    eventSource.close(); // 통신 에러 발생 시 연결 종료
+                    alert('서버와의 연결이 끊어졌습니다.');
+                    resetUI();
+                };
 
             } catch (error) {
                 alert(`오류 발생: ${error.message}`);

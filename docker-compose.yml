@@ -20,6 +20,7 @@ services:
       - redis
     command: ["node", "src/app.js"]
 
+
   # 2. Worker 전용 컨테이너
   pdf-worker:
     build: .
@@ -59,6 +60,7 @@ services:
       - "6379:6379"
     networks:
       - cld-net
+
 
 networks:
   cld-net:

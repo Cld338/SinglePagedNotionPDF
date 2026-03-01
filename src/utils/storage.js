@@ -18,7 +18,8 @@ class LocalStorageProvider extends StorageProvider {
         const filePath = path.join(this.baseDir, fileName);
         await fs.writeFile(filePath, buffer);
         logger.info(`File saved locally: ${fileName}`);
-        return `/downloads/${fileName}`; // 클라이언트 접근용 상대 경로
+        // 클라이언트 접근용 상대 경로를 전용 API 라우트로 변경
+        return `/api/downloads/${fileName}`; 
     }
 }
 
