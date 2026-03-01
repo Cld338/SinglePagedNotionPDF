@@ -45,7 +45,7 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
             removeOnComplete: 100, // 성공한 작업은 최근 100개만 유지
             removeOnFail: 500      // 실패한 작업(DLQ)은 분석을 위해 500개까지 보관
         });
-        
+
         logger.info(`Job ${job.id} added to queue for URL: ${value.url}`);
         res.status(202).json({ jobId: job.id, message: '변환 대기열에 등록되었습니다.' });
 
@@ -59,42 +59,80 @@ router.get('/job-events/:id', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('X-Accel-Buffering', 'no'); // Nginx 버퍼링 방지
 
     const jobId = req.params.id;
+    let lastState = null;
+    let timeoutCount = 0;
+    const MAX_TIMEOUT_CYCLES = 300; // 2초 주기, 최대 10분 대기
+
+    // 스트림 종료 여부를 확인하는 안전한 전송 함수
+    const sendEvent = (data) => {
+        if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        }
+    };
 
     const intervalId = setInterval(async () => {
         try {
+            timeoutCount++;
+            
+            // 1. 무한 대기 방지 (Timeout)
+            if (timeoutCount > MAX_TIMEOUT_CYCLES) {
+                sendEvent({ status: 'error', error: '작업 대기 시간이 초과되었습니다.' });
+                clearInterval(intervalId);
+                return res.end();
+            }
+
             const job = await pdfQueue.getJob(jobId);
             
             if (!job) {
-                res.write(`data: ${JSON.stringify({ status: 'error', error: '작업을 찾을 수 없습니다.' })}\n\n`);
+                sendEvent({ status: 'error', error: '작업을 찾을 수 없습니다.' });
                 clearInterval(intervalId);
                 return res.end();
             }
 
             const state = await job.getState();
             
-            if (state === 'completed') {
-                const result = job.returnvalue; 
-                res.write(`data: ${JSON.stringify({ status: 'completed', result })}\n\n`);
-                clearInterval(intervalId);
-                res.end();
-            } else if (state === 'failed') {
-                res.write(`data: ${JSON.stringify({ status: 'failed', error: job.failedReason })}\n\n`);
-                clearInterval(intervalId);
-                res.end();
-            } else {
-                res.write(`data: ${JSON.stringify({ status: state })}\n\n`);
+            // 2. 불필요한 이벤트 발행 최소화 (상태가 변경되었을 때만 전송)
+            if (state !== lastState) {
+                lastState = state;
+
+                if (state === 'completed') {
+                    const result = job.returnvalue; 
+                    sendEvent({ status: 'completed', result });
+                    clearInterval(intervalId);
+                    res.end();
+                } else if (state === 'failed') {
+                    sendEvent({ status: 'failed', error: job.failedReason });
+                    clearInterval(intervalId);
+                    res.end();
+                } else {
+                    sendEvent({ status: state });
+                }
+            } else if (state === 'active' && job.progress) {
+                // 향후 worker.js에서 job.updateProgress() 사용 시 진행률 전송 지원
+                sendEvent({ status: state, progress: job.progress });
             }
+
         } catch (err) {
-            res.write(`data: ${JSON.stringify({ status: 'error', error: '상태 조회 중 오류 발생' })}\n\n`);
+            logger.error(`[SSE] Error processing job ${jobId}: ${err.message}`);
+            sendEvent({ status: 'error', error: '상태 조회 중 서버 오류 발생' });
             clearInterval(intervalId);
             res.end();
         }
     }, 2000);
 
-    req.on('close', () => clearInterval(intervalId));
+    // 3. 연결 유실 대비 예외 처리 강화
+    req.on('close', () => {
+        logger.info(`[SSE] Client disconnected for job ${jobId}`);
+        clearInterval(intervalId);
+    });
+
+    req.on('error', (err) => {
+        logger.error(`[SSE] Request error for job ${jobId}: ${err.message}`);
+        clearInterval(intervalId);
+    });
 });
 
 router.get('/download/:filename', (req, res) => {
