@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # 1. API 서버 컨테이너 (테스트용)
+  fastapi-app-test:
+    build: .
+    container_name: my-pdf-app-test
+    environment:
+      - REDIS_HOST=redis-test
+      - REDIS_PORT=6379
+      - NODE_ENV=development
+    env_file:
+      - .env
+    volumes:
+      - ./public/downloads:/usr/src/public/downloads
+    ports:
+      - "3001:3000" # 호스트 포트를 3001로 변경하여 충돌 방지
+    networks:      
+      - cld-net-test
+    depends_on:
+      - redis-test
+    command: ["node", "src/app.js"]
+
+  # 2. Worker 전용 컨테이너 (테스트용)
+  pdf-worker-test:
+    build: .
+    container_name: my-pdf-worker-test
+    environment:
+      - REDIS_HOST=redis-test
+      - REDIS_PORT=6379
+      - NODE_ENV=development
+    volumes:
+      - ./public/downloads:/usr/src/public/downloads
+    networks:      
+      - cld-net-test
+    depends_on:
+      - redis-test
+    command: ["node", "src/worker.js"]
+
+  # 3. VitePress 문서 사이트 컨테이너 (테스트용)
+  docs-site-test:
+    build: .
+    container_name: my-pdf-docs-test
+    ports:
+      - "5174:5173" # 호스트 포트를 5174로 변경
+    volumes:
+      - .:/usr/src
+    networks:
+      - cld-net-test
+    command: ["npm", "run", "docs:dev"]
+
+  # 4. Redis (테스트용 독립 구성)
+  redis-test:
+    image: redis:alpine
+    container_name: my-pdf-redis-test
+    ports:
+      - "6380:6379" # 호스트 포트를 6380으로 변경
+    networks:
+      - cld-net-test
+
+networks:
+  cld-net-test: # 운영 환경(cld-net)과 물리적으로 분리된 네트워크 생성
