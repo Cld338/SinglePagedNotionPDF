@@ -25,7 +25,6 @@ const pdfQueue = new Queue('pdf-conversion', { connection });
 app.use(helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false, // 다운로드 차단의 주된 원인을 제거합니다.
-    crossOriginResourcePolicy: { policy: "cross-origin" } 
 }));
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -51,7 +50,12 @@ app.get('/download/:filename', (req, res) => {
 
 app.use(express.static(path.join(__dirname, '../public')));
 
-app.use('/downloads', express.static(path.join(__dirname, '../public/downloads')));
+app.use('/downloads', express.static(path.join(__dirname, '../public/downloads'), {
+    setHeaders: (res, path, stat) => {
+        res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
+}));
+
 
 app.use('/docs', express.static(path.join(__dirname, '../docs/.vitepress/dist')));
 
