@@ -51,51 +51,10 @@ app.get('/download/:filename', (req, res) => {
 
 app.use(express.static(path.join(__dirname, '../public')));
 
+app.use('/downloads', express.static(path.join(__dirname, '../public/downloads')));
+
 app.use('/docs', express.static(path.join(__dirname, '../docs/.vitepress/dist')));
 
-// src/app.js
-app.get('/job-events/:id', async (req, res) => {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    const jobId = req.params.id;
-
-    const intervalId = setInterval(async () => {
-        try {
-            // [수정] Stale State 방지를 위해 매 주기마다 Job의 최신 상태를 큐에서 재조회
-            const job = await pdfQueue.getJob(jobId);
-            
-            if (!job) {
-                res.write(`data: ${JSON.stringify({ status: 'error', error: '작업을 찾을 수 없습니다.' })}\n\n`);
-                clearInterval(intervalId);
-                return res.end();
-            }
-
-            const state = await job.getState();
-            
-            if (state === 'completed') {
-                // 재조회된 객체이므로 정상적으로 returnvalue(결과값)를 참조 가능
-                const result = job.returnvalue; 
-                res.write(`data: ${JSON.stringify({ status: 'completed', result })}\n\n`);
-                clearInterval(intervalId);
-                res.end();
-            } else if (state === 'failed') {
-                res.write(`data: ${JSON.stringify({ status: 'failed', error: job.failedReason })}\n\n`);
-                clearInterval(intervalId);
-                res.end();
-            } else {
-                res.write(`data: ${JSON.stringify({ status: state })}\n\n`);
-            }
-        } catch (err) {
-            res.write(`data: ${JSON.stringify({ status: 'error', error: '상태 조회 중 오류 발생' })}\n\n`);
-            clearInterval(intervalId);
-            res.end();
-        }
-    }, 2000);
-
-    req.on('close', () => clearInterval(intervalId));
-});
 
 const convertLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -140,26 +99,32 @@ app.post('/convert-url', convertLimiter, async (req, res) => {
         res.status(500).json({ error: '서버 내부 오류로 대기열 등록에 실패했습니다.' });
     }
 });
-// [수정] SSE를 이용한 상태 실시간 스트리밍 엔드포인트
+
+// src/app.js
 app.get('/job-events/:id', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Nginx 등을 사용하는 경우 버퍼링 방지 필수
 
     const jobId = req.params.id;
-    const job = await pdfQueue.getJob(jobId);
-    
-    if (!job) {
-        res.write(`data: ${JSON.stringify({ status: 'error', error: '작업을 찾을 수 없습니다.' })}\n\n`);
-        return res.end();
-    }
 
-    // 서버 사이드에서 상태를 확인하여 클라이언트로 이벤트 전송
     const intervalId = setInterval(async () => {
         try {
+            // [수정] Stale State 방지를 위해 매 주기마다 Job의 최신 상태를 큐에서 재조회
+            const job = await pdfQueue.getJob(jobId);
+            
+            if (!job) {
+                res.write(`data: ${JSON.stringify({ status: 'error', error: '작업을 찾을 수 없습니다.' })}\n\n`);
+                clearInterval(intervalId);
+                return res.end();
+            }
+
             const state = await job.getState();
+            
             if (state === 'completed') {
-                const result = job.returnvalue;
+                // 재조회된 객체이므로 정상적으로 returnvalue(결과값)를 참조 가능
+                const result = job.returnvalue; 
                 res.write(`data: ${JSON.stringify({ status: 'completed', result })}\n\n`);
                 clearInterval(intervalId);
                 res.end();
@@ -168,7 +133,6 @@ app.get('/job-events/:id', async (req, res) => {
                 clearInterval(intervalId);
                 res.end();
             } else {
-                // active 또는 waiting 상태 전송
                 res.write(`data: ${JSON.stringify({ status: state })}\n\n`);
             }
         } catch (err) {
@@ -178,7 +142,6 @@ app.get('/job-events/:id', async (req, res) => {
         }
     }, 2000);
 
-    // 클라이언트 연결 종료 시 인터벌 해제
     req.on('close', () => clearInterval(intervalId));
 });
 

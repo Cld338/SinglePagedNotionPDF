@@ -19,6 +19,8 @@ RUN npm install
 
 COPY . .
 
+# RUN mkdir -p public/downloads && chmod -R 777 public/downloads
+
 # VitePress 문서 빌드 추가
 RUN npm run docs:build
 
