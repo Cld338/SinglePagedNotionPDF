@@ -85,8 +85,8 @@ class PdfService {
                 page.on('request', request => {
                     const url = request.url();
 
-                    // 1. 위험한 프로토콜 차단 (file:// 등)
-                    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    // http://, https:// 외에 data: 프로토콜도 허용 목록에 추가
+                    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:')) {
                         logger.warn(`Blocked unsafe protocol: ${url}`);
                         return request.abort();
                     }
@@ -102,7 +102,6 @@ class PdfService {
                     request.continue();
                 });
 
-                // [중요] PDF 생성 타임아웃을 늘립니다. (기본 30초 -> 2분)
                 page.setDefaultNavigationTimeout(120000);
                 page.setDefaultTimeout(120000);
 
@@ -112,6 +111,44 @@ class PdfService {
                 await page.setViewport({ width: parseInt(width), height: 100 });
 
                 await page.goto(url, { waitUntil: 'networkidle0' });
+
+                // [추가] 1. 노션 핵심 콘텐츠 래퍼 엘리먼트 렌더링 대기
+                try {
+                    await page.waitForSelector('.notion-page-content', { visible: true, timeout: 10000 });
+                } catch (e) {
+                    logger.warn('Notion page content selector not found or delayed.');
+                }
+
+                // [추가] 2. DOM 안정화 검증 (MutationObserver 활용)
+                // 비동기 컴포넌트(수식, 임베드 등)가 모두 렌더링될 때까지 대기
+                await page.evaluate(() => {
+                    return new Promise((resolve) => {
+                        let timeout;
+                        // DOM 변경을 감지하는 옵저버 설정
+                        const observer = new MutationObserver(() => {
+                            clearTimeout(timeout);
+                            // DOM 변경이 발생하면 타이머를 초기화하고 1.5초 대기
+                            timeout = setTimeout(() => {
+                                observer.disconnect();
+                                resolve();
+                            }, 1500);
+                        });
+                        
+                        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+                        
+                        // 초기 타이머 설정 (변경이 아예 없으면 1.5초 후 즉시 종료)
+                        timeout = setTimeout(() => {
+                            observer.disconnect();
+                            resolve();
+                        }, 1500);
+
+                        // 무한 대기 방지를 위한 안전장치 (최대 10초)
+                        setTimeout(() => {
+                            observer.disconnect();
+                            resolve();
+                        }, 10000);
+                    });
+                });
 
                 // ----------------------------------------------------------------
                 // [추가 1] CSS 강제 주입 (가장 확실한 안전장치)
@@ -204,7 +241,8 @@ class PdfService {
                     });
                 }, { includeBanner, includeTitle, includeTags });
 
-                // 이미지 로딩 확실히 대기
+
+                // 이미지 로딩 대기
                 await page.evaluate(async () => {
                     await new Promise((resolve) => {
                         let totalHeight = 0;
@@ -217,10 +255,30 @@ class PdfService {
                                 clearInterval(timer);
                                 resolve();
                             }
-                        }, 50); // 스크롤 속도 조절
+                        }, 50);
                     });
                     // 맨 위로 복귀
                     window.scrollTo(0, 0);
+                });
+
+                // [추가 1] 스크롤로 인해 요청된 이미지 다운로드가 완료될 때까지 네트워크 유휴 상태 대기
+                try {
+                    await page.waitForNetworkIdle({ idleTime: 1000, timeout: 15000 });
+                } catch (e) {
+                    logger.warn(`Network idle timeout waiting for images: ${e.message}`);
+                }
+
+                // [추가 2] 문서 내 모든 DOM img 태그가 실제로 렌더링 완료되었는지 확인
+                await page.evaluate(async () => {
+                    const images = document.querySelectorAll('img');
+                    await Promise.all(Array.from(images).map(img => {
+                        if (img.complete) return Promise.resolve();
+                        return new Promise((resolve) => {
+                            // 로드 성공 또는 실패 시 모두 resolve하여 무한 대기 방지
+                            img.addEventListener('load', resolve, { once: true });
+                            img.addEventListener('error', resolve, { once: true });
+                        });
+                    }));
                 });
 
                 const bodyHeight = await page.evaluate(() => {
