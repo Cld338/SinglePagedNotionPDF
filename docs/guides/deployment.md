@@ -13,6 +13,9 @@
 - `REDIS_PORT`: Redis 포트 (기본값: 6379)
 - `NODE_ENV`: 실행 환경 (`production` 또는 `development`)
 - `WORKER_CONCURRENCY`: Worker가 동시에 처리할 브라우저 탭 수 (기본값: 2)
+- `ADMIN_USERNAME`: 대시보드 접근용 관리자 아이디 (필수)
+- `ADMIN_PASSWORD`: 대시보드 접근용 관리자 비밀번호 (필수)
+- `BULL_BOARD_PATH`: 큐 모니터링 대시보드 마운트 경로 (기본값: `/admin/queues`)
 
 ## 3. 컨테이너 구성 (`docker-compose.yml`)
 시스템은 3개의 컨테이너로 오케스트레이션 됩니다.

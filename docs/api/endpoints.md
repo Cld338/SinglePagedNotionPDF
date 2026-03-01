@@ -22,7 +22,7 @@
   "jobId": "1",
   "message": "변환 대기열에 등록되었습니다."
 }
-
+```
 ## 2. 작업 상태 실시간 수신 (SSE)
 Server-Sent Events(SSE)를 통해 등록된 변환 작업의 진행 상태를 실시간으로 스트리밍받습니다.
 
@@ -67,3 +67,15 @@ Server-Sent Events(SSE)를 통해 등록된 변환 작업의 진행 상태를 �
 ### Success Response (200 OK)
 - **응답 본문:** 파일 스트림 (File Stream)
 - **응답 헤더:** `Content-Disposition: attachment; filename="{fileName}"`
+
+
+## 4. 큐 모니터링 대시보드
+현재 시스템 큐에 등록된 작업 내역과 워커 상태를 시각적으로 확인하고 관리할 수 있는 관리자 전용 대시보드입니다.
+
+- **URL**: `/admin/queues` (환경 변수 `BULL_BOARD_PATH`로 변경 가능)
+
+- **Method**: `GET`
+
+- **Headers**: `Authorization: Basic {base64(username:password)}`
+
+- **응답**: HTML 기반의 Bull Board 웹 UI
