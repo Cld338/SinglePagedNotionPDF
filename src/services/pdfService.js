@@ -241,8 +241,7 @@ class PdfService {
                     });
                 }, { includeBanner, includeTitle, includeTags });
 
-
-                // 이미지 로딩 대기
+                // 이미지 로딩 확실히 대기
                 await page.evaluate(async () => {
                     await new Promise((resolve) => {
                         let totalHeight = 0;
@@ -255,30 +254,10 @@ class PdfService {
                                 clearInterval(timer);
                                 resolve();
                             }
-                        }, 50);
+                        }, 50); // 스크롤 속도 조절
                     });
                     // 맨 위로 복귀
                     window.scrollTo(0, 0);
-                });
-
-                // [추가 1] 스크롤로 인해 요청된 이미지 다운로드가 완료될 때까지 네트워크 유휴 상태 대기
-                try {
-                    await page.waitForNetworkIdle({ idleTime: 1000, timeout: 15000 });
-                } catch (e) {
-                    logger.warn(`Network idle timeout waiting for images: ${e.message}`);
-                }
-
-                // [추가 2] 문서 내 모든 DOM img 태그가 실제로 렌더링 완료되었는지 확인
-                await page.evaluate(async () => {
-                    const images = document.querySelectorAll('img');
-                    await Promise.all(Array.from(images).map(img => {
-                        if (img.complete) return Promise.resolve();
-                        return new Promise((resolve) => {
-                            // 로드 성공 또는 실패 시 모두 resolve하여 무한 대기 방지
-                            img.addEventListener('load', resolve, { once: true });
-                            img.addEventListener('error', resolve, { once: true });
-                        });
-                    }));
                 });
 
                 const bodyHeight = await page.evaluate(() => {
