@@ -85,12 +85,12 @@ class PdfService {
                 page.on('request', request => {
                     const url = request.url();
 
-                    // http://, https:// 외에 data: 프로토콜도 허용 목록에 추가
                     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:')) {
                         logger.warn(`Blocked unsafe protocol: ${url}`);
                         return request.abort();
                     }
 
+                    // 2. 로컬 호스트 및 사설 IP 대역 차단 (SSRF 방지)
                     // 2. 로컬 호스트 및 사설 IP 대역 차단 (SSRF 방지)
                     const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(url);
 
@@ -243,6 +243,12 @@ class PdfService {
 
                 // 이미지 로딩 확실히 대기
                 await page.evaluate(async () => {
+                    // 1. Lazy loading 무효화 (Eager 전환)
+                    document.querySelectorAll('img[loading="lazy"]').forEach(img => {
+                        img.removeAttribute('loading');
+                    });
+
+                    // 2. 스크롤을 통한 리소스 로딩 트리거
                     await new Promise((resolve) => {
                         let totalHeight = 0;
                         const distance = 100;
@@ -254,8 +260,22 @@ class PdfService {
                                 clearInterval(timer);
                                 resolve();
                             }
-                        }, 50); // 스크롤 속도 조절
+                        }, 50); 
                     });
+
+                    // 3. 렌더링 트리 내 모든 이미지의 네트워크 다운로드 완료 대기
+                    const images = Array.from(document.querySelectorAll('img'));
+                    await Promise.all(images.map(img => {
+                        // 이미 로드되었거나 캐시된 이미지 처리
+                        if (img.complete) return Promise.resolve();
+                        
+                        // 진행 중인 이미지 로드 대기 (에러 발생 시에도 무한 대기 방지)
+                        return new Promise((resolve) => {
+                            img.addEventListener('load', resolve, { once: true });
+                            img.addEventListener('error', resolve, { once: true });
+                        });
+                    }));
+
                     // 맨 위로 복귀
                     window.scrollTo(0, 0);
                 });

@@ -12,3 +12,5 @@ Puppeteer 브라우저 인스턴스가 내부망이나 민감한 로컬 파일�
 - **Rate Limiting**: 무분별한 PDF 변환 요청으로 인한 서버 자원 고갈(DDoS)을 방지하기 위해 `express-rate-limit`을 적용했습니다. (15분당 최대 10회 요청 허용)
 - **보안 헤더**: `helmet` 미들웨어를 사용하여 기본적인 HTTP 보안 헤더를 설정합니다.
 - **페이로드 제한**: Express Body Parser의 limit을 `50mb`로 제한하여 과도한 크기의 요청 본문을 차단합니다.
+
+

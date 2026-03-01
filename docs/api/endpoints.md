@@ -52,4 +52,3 @@ Pending Response (진행 중 - 200 OK)
 }
 ```
 
-
