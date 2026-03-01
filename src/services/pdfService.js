@@ -84,13 +84,25 @@ class PdfService {
 
                 page.on('request', request => {
                     const url = request.url();
+                    // 현재 요청이 메인 프레임의 페이지 이동인지 확인
+                    const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
 
+                    // 1. 프로토콜 체크 (기존 유지)
                     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:')) {
                         logger.warn(`Blocked unsafe protocol: ${url}`);
                         return request.abort();
                     }
 
-                    // 2. 로컬 호스트 및 사설 IP 대역 차단 (SSRF 방지)
+                    // [추가] 2. 메인 페이지 이동 시 노션 도메인 여부 검증
+                    if (isMainFrame) {
+                        const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(url);
+                        if (!isNotionDomain) {
+                            logger.warn(`Blocked unauthorized navigation to: ${url}`);
+                            return request.abort();
+                        }
+                    }
+
+                    // 3. 로컬 호스트 및 사설 IP 대역 차단 (SSRF 방지 - 기존 유지)
                     const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(url);
 
                     if (isLocal) {
