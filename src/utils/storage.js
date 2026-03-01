@@ -22,5 +22,4 @@ class LocalStorageProvider extends StorageProvider {
     }
 }
 
-// 향후 S3 도입 시 S3StorageProvider를 추가하여 쉽게 교체 가능
 module.exports = new LocalStorageProvider(path.join(__dirname, '../../public/downloads'));

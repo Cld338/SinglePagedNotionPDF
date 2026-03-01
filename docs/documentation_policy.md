@@ -31,7 +31,7 @@
 
 시스템의 아키텍처나 주요 기술 스택에 중대한 변경이 있을 경우, 반드시 `docs/adr/` 디렉토리에 다음 형식으로 기록을 남깁니다.
 
-- **파일명**: `NNNN-short-title.md` (예: `0002-migrate-to-s3-storage.md`)
+- **파일명**: `NNNN-short-title.md` (예: `0002-XXX-XX-XXXXX.md`)
 - **필수 포함 항목**:
   1. Context (도입 배경 및 문제 상황)
   2. Decision (결정 사항)

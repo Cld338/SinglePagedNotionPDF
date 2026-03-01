@@ -91,7 +91,6 @@ class PdfService {
                     }
 
                     // 2. 로컬 호스트 및 사설 IP 대역 차단 (SSRF 방지)
-                    // 2. 로컬 호스트 및 사설 IP 대역 차단 (SSRF 방지)
                     const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(url);
 
                     if (isLocal) {
