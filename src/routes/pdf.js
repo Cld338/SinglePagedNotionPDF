@@ -145,9 +145,19 @@ router.get('/download/:filename', (req, res) => {
 
     res.download(filePath, fileName, (err) => {
         if (err) {
-            if (res.headersSent) return;
-            res.status(404).json({ error: '파일을 찾을 수 없거나 이미 삭제되었습니다.' });
+            if (!res.headersSent) {
+                res.status(404).json({ error: '파일을 찾을 수 없습니다.' });
+            }
+            return;
         }
+
+        fs.unlink(filePath, (unlinkErr) => {
+            if (unlinkErr) {
+                logger.error(`Failed to delete temporary file ${fileName}: ${unlinkErr.message}`);
+            } else {
+                logger.info(`Temporary file deleted: ${fileName}`);
+            }
+        });
     });
 });
 
