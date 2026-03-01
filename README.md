@@ -31,3 +31,8 @@ http://localhost:3000
 # 테스트 실행
 npm test
 ```
+
+## 환경 변수 (Environment Variables)
+- `ADMIN_USERNAME`: 대시보드 접근 관리자 아이디 (필수)
+- `ADMIN_PASSWORD`: 대시보드 접근 관리자 비밀번호 (필수)
+- `BULL_BOARD_PATH`: 대시보드 마운트 경로 (기본값: `/admin/queues`)

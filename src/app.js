@@ -7,9 +7,12 @@ require('dotenv').config();
 const logger = require('./utils/logger');
 const pdfRoutes = require('./routes/pdf');
 const startCleanupJob = require('./jobs/cleanup');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+
 
 app.set('trust proxy', 1);
 
@@ -31,12 +34,17 @@ app.use('/downloads', express.static(path.join(__dirname, '../public/downloads')
 
 app.use('/docs', express.static(path.join(__dirname, '../docs/.vitepress/dist')));
 
+// 모니터링 라우터 등록
+app.use(process.env.BULL_BOARD_PATH || '/admin/queues', adminRoutes);
+
 // 라우터 등록
 app.use('/', pdfRoutes);
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public', 'index.html'));
 });
+
+
 
 // 파일 정리 스케줄러 실행
 startCleanupJob();
