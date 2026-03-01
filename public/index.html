@@ -49,9 +49,25 @@
             loadingOverlay.style.display = 'flex';
             loadingText.innerHTML = 'PDF 변환 대기열에 등록 중입니다...';
 
+            // 기존 코드 부분
             const formData = new FormData(this);
+
+            // 1. URL 전처리 로직 추가
+            let rawUrl = formData.get('url').trim();
+            try {
+                const urlObj = new URL(rawUrl);
+                // 쿼리 스트링(?, source=... 등) 제거
+                const cleanUrl = `${urlObj.origin}${urlObj.pathname}`;
+                rawUrl = cleanUrl;
+            } catch (e) {
+                // URL 형식이 아예 아닐 경우 처리
+                alert('올바른 URL 형식이 아닙니다.');
+                resetUI();
+                return;
+            }
+
             const data = {
-                url: formData.get('url'),
+                url: rawUrl, // 깨끗해진 URL 전달
                 width: formData.get('width') || '1080px',
                 includeTitle: formData.get('includeTitle') === 'true',
                 includeBanner: formData.get('includeBanner') === 'true',

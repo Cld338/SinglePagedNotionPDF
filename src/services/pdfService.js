@@ -1,4 +1,5 @@
 ﻿const puppeteer = require('puppeteer');
+const { Readable } = require('stream'); // 스트림 변환을 위해 추가
 const logger = require('../utils/logger');
 
 class PdfService {
@@ -84,6 +85,7 @@ class PdfService {
 
                 page.on('request', request => {
                     const url = request.url();
+                    url.replace("?source=copy_link", "");
                     // 현재 요청이 메인 프레임의 페이지 이동인지 확인
                     const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
 
@@ -299,7 +301,7 @@ class PdfService {
                 await page.setViewport({ width: parseInt(width), height: Math.ceil(bodyHeight) + 100 });
 
                 // [핵심 수정] 메모리 누수 방지를 위한 Stream 반환
-                const pdfStream = await page.createPDFStream({
+                const pdfWebStream = await page.createPDFStream({
                     width: width,
                     height: `${Math.ceil(bodyHeight) + 100}px`,
                     printBackground: true,
@@ -310,8 +312,18 @@ class PdfService {
                     outline: true,
                 });
 
-                // 생성된 Readable 스트림을 그대로 반환
-                return pdfStream;
+                // 웹 스트림을 Node.js Readable 스트림으로 변환
+                const nodeStream = Readable.fromWeb(pdfWebStream);
+
+                // 스트림이 완전히 종료(close)되면 페이지를 닫아 메모리 해제
+                nodeStream.on('close', async () => {
+                    if (page) {
+                        await page.close().catch(err => logger.error(`Page close error: ${err.message}`));
+                        logger.info('Page closed successfully.');
+                    }
+                });
+
+                return nodeStream;
 
             } catch (error) {
                 logger.error(`PDF Generation failed: ${error.message}`);
