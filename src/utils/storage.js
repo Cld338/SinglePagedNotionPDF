@@ -14,13 +14,14 @@ class LocalStorageProvider extends StorageProvider {
         this.baseDir = baseDir;
     }
 
-    async save(fileName, buffer) {
-        const filePath = path.join(this.baseDir, fileName);
-        await fs.writeFile(filePath, buffer);
-        logger.info(`File saved locally: ${fileName}`);
+    async saveStream(fileName, pdfStream) {
+        const filePath = path.join(this.basePath, fileName);
+        const writeStream = fs.createWriteStream(filePath);
+
+        // stream/promises의 pipeline을 사용하여 안전하게 파이핑 및 에러 처리
+        await pipeline(pdfStream, writeStream);
         
-        // 클라이언트 접근용 상대 경로를 app.js의 엔드포인트와 일치하도록 수정
-        return `/download/${fileName}`; 
+        return `/downloads/${fileName}`;
     }
 }
 

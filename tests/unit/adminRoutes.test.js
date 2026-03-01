@@ -21,10 +21,20 @@ describe('Admin Routes', () => {
     });
 
     afterAll(async () => {
-        // 3. 테스트 종료 시 Redis 연결을 명시적으로 종료하여 Open Handles 에러를 방지합니다.
-        if (queueConfig && queueConfig.connection) {
-            await queueConfig.connection.quit();
+        const { pdfQueue, connection } = require('../../src/config/queue');
+        
+        // 1. Queue 인스턴스 종료 (중요)
+        if (pdfQueue) {
+            await pdfQueue.close();
         }
+        
+        // 2. Redis 연결 종료
+        if (connection) {
+            await connection.quit();
+        }
+        
+        // 비동기 로그 처리를 위해 아주 짧은 대기 시간을 줍니다.
+        await new Promise(resolve => setTimeout(resolve, 100));
     });
 
     it('인증 정보 없이 접근 시 401 Unauthorized를 반환해야 한다', async () => {

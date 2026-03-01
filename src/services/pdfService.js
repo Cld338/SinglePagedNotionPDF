@@ -286,8 +286,8 @@ class PdfService {
 
                 await page.setViewport({ width: parseInt(width), height: Math.ceil(bodyHeight) + 100 });
 
-                // [핵심 수정] PDF 생성
-                const uint8ArrayBuffer = await page.pdf({
+                // [핵심 수정] 메모리 누수 방지를 위한 Stream 반환
+                const pdfStream = await page.createPDFStream({
                     width: width,
                     height: `${Math.ceil(bodyHeight) + 100}px`,
                     printBackground: true,
@@ -298,14 +298,12 @@ class PdfService {
                     outline: true,
                 });
 
-                // Uint8Array를 Node.js Buffer로 확실하게 변환
-                return Buffer.from(uint8ArrayBuffer);
+                // 생성된 Readable 스트림을 그대로 반환
+                return pdfStream;
 
             } catch (error) {
                 logger.error(`PDF Generation failed: ${error.message}`);
                 throw error;
-            } finally {
-                if (page) await page.close();
             }
         });
     }

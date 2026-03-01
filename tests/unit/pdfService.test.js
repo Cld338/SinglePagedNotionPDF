@@ -1,3 +1,5 @@
+const { Readable } = require('stream');
+
 const pdfService = require('../../src/services/pdfService');
 
 describe('PdfService 동시성 제어 및 큐(Queue) 단위 테스트', () => {
@@ -51,4 +53,5 @@ describe('PdfService 동시성 제어 및 큐(Queue) 단위 테스트', () => {
         expect(pdfService.queue.length).toBe(0);
         expect(task3).toHaveBeenCalledTimes(1);
     });
+    
 });

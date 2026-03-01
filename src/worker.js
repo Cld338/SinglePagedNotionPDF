@@ -10,10 +10,9 @@ const worker = new Worker('pdf-conversion', async (job) => {
     logger.info(`[Job ${job.id}] Start processing: ${targetUrl} (Attempt: ${job.attemptsMade + 1})`);
 
     try {
-        const pdfBuffer = await pdfService.generatePdf(targetUrl, options);
-        
+        const pdfStream = await pdfService.generatePdf(targetUrl, options);
         const fileName = `notion-${job.id}-${Date.now()}.pdf`;
-        const downloadUrl = await storage.save(fileName, pdfBuffer);
+        const downloadUrl = await storage.saveStream(fileName, pdfStream); // save -> saveStream 변경
 
         logger.info(`[Job ${job.id}] Successfully completed`);
         return { downloadUrl, fileName };

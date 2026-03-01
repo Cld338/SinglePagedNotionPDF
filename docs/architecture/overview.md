@@ -32,6 +32,6 @@ SingleNotion은 노션 페이지를 PDF로 변환하는 과정에서 발생할 �
 1. **[Client]** 웹 UI에서 변환할 URL과 옵션을 선택하여 전송.
 2. **[API Server]** 요청을 파싱하여 BullMQ에 Job 추가 후 클라이언트에게 `jobId` 반환 (202 Accepted).
 3. **[Client]** 반환받은 `jobId`를 이용해 서버에 SSE(Server-Sent Events) 연결(`/job-events/:id`)을 맺음.
-4. **[Worker]** 큐에서 Job을 획득하여 Puppeteer로 노션 페이지 접속 및 PDF 렌더링 수행.
-5. **[Worker]** 생성된 PDF 버퍼를 로컬 디렉토리(`/public/downloads`)에 저장 후 Job 상태를 'completed'로 업데이트.
+4. **[Worker]** 큐에서 Job을 획득하여 Puppeteer로 노션 페이지 접속 및 PDF 스트림 렌더링 수행.
+5. **[Worker]** 생성된 PDF 스트림(Stream)을 로컬 디렉토리(`/public/downloads`)에 파이핑하여 저장 후 Job 상태를 'completed'로 업데이트.
 6. **[Client]** 폴링 결과가 'completed'일 경우, 반환된 다운로드 URL(`/downloads/...`)을 호출하여 `Content-Disposition: attachment` 헤더를 통해 브라우저 파일 다운로드 수행.
